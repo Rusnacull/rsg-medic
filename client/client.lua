@@ -24,9 +24,9 @@ local deathTimer = function()
     deathSecondsRemaining = Config.DeathTimer
     CreateThread(function()
         while deathSecondsRemaining > 0 do
-            Wait(1000)
-            deathSecondsRemaining = deathSecondsRemaining - 1
-            TriggerEvent("rsg-medic:client:GetMedicsOnDuty")
+            Wait(5000)  -- Run this every 5 seconds instead of every second
+            deathSecondsRemaining = deathSecondsRemaining - 5
+            TriggerEvent("rsg-medic:client:GetMedicsOnDuty")  -- Still adjust based on your needs.
         end
     end)
 end
@@ -139,20 +139,13 @@ end
 ---------------------------------------------------------------------
 -- process camera controls
 ---------------------------------------------------------------------
-local ProcessCamControls = function()
+local function ProcessCamControls()
+    if not deadcam then return end  -- Skip if not using a deathcam
 
     local playerCoords = GetEntityCoords(cache.ped)
-
-    -- disable 1st person as the 1st person camera can cause some glitches
     DisableOnFootFirstPersonViewThisUpdate()
-
-    -- calculate new position
     local newPos = ProcessNewPosition()
-
-    -- set coords of cam
     SetCamCoord(deadcam, newPos.x, newPos.y, newPos.z)
-
-    -- set rotation
     PointCamAtCoord(deadcam, playerCoords.x, playerCoords.y, playerCoords.z)
 end
 
@@ -254,29 +247,39 @@ end)
 CreateThread(function()
     repeat Wait(1000) until LocalPlayer.state['isLoggedIn']
     while true do
-        local health = GetEntityHealth(cache.ped)
-        if health == 0 and deathactive == false then
-            exports.spawnmanager:setAutoSpawn(false)
-            deathTimerStarted = true
-            deathTimer()
-            deathLog()
-            deathactive = true
-            TriggerServerEvent("RSGCore:Server:SetMetaData", "isdead", true)
-            TriggerEvent('rsg-medic:client:DeathCam')
-        end
         Wait(1000)
+        local health = GetEntityHealth(cache.ped)
+
+        if health == 0 then
+            if not deathactive then
+                deathTimerStarted = true
+                deathTimer()
+                deathLog()
+                deathactive = true
+                TriggerServerEvent("RSGCore:Server:SetMetaData", "isdead", true)
+                TriggerEvent('rsg-medic:client:DeathCam')
+            end
+        else
+            deathactive = false  -- Resets if the player is alive; make sure to reset related variables here as necessary.
+        end
     end
 end)
 
 ---------------------------------------------------------------------
 -- player update health loop
 ---------------------------------------------------------------------
+local previousHealth = GetEntityHealth(cache.ped)
+
 CreateThread(function()
     repeat Wait(1000) until LocalPlayer.state['isLoggedIn']
     while true do
-        local health = GetEntityHealth(cache.ped)
-        TriggerServerEvent('rsg-medic:server:SetHealth', health)
         Wait(1000)
+        local currentHealth = GetEntityHealth(cache.ped)
+        -- Only send if health has changed significantly.
+        if currentHealth ~= previousHealth then
+            TriggerServerEvent('rsg-medic:server:SetHealth', currentHealth)
+            previousHealth = currentHealth
+        end
     end
 end)
 
